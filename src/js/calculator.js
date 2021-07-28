@@ -29,11 +29,11 @@ export default class Calculator extends React.Component {
         this.handleRemoveRecipe = this.handleRemoveRecipe.bind(this);
 
         const allSkills = {};
-        Object.keys(props.config.Recipes).forEach(recipe => {
-            if(typeof props.config.Recipes[recipe].skill === 'undefined')
-                return;
-
-            allSkills[props.config.Recipes[recipe].skill] = 1;
+        Object.keys(props.config.Recipes).forEach(r => {
+            const recipe = props.config.Recipes[r];
+            Object.keys(recipe.requiredSkills).forEach(s => {
+                allSkills[s] = 1;
+            });
         });
 
         const languages = Object.keys(this.props.config.Localization);
@@ -340,14 +340,14 @@ export default class Calculator extends React.Component {
                             return;
                         }
 
-                        price += ingredientPrices[ingredient] * parseInt(recipe.ingredients[ingredient], 10);
+                        price += ingredientPrices[ingredient] * recipe.ingredients[ingredient].quantity;
                     });
 
                     if(!allIngredientsKnown)
                         return;
 
-                    recipe.products.keySeq().forEach((product, index) => {
-                        let quantity = parseInt(recipe.products[product], 10);
+                    Object.keys(recipe.products).forEach((product, index) => {
+                        let quantity = recipe.products[product];
                         if (index === 0)
                         {
                             price /= quantity;

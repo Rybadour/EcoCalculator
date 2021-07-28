@@ -11,14 +11,13 @@
  */
 
 using System;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using Eco.Core.Plugins.Interfaces;
 using Eco.Gameplay.Components;
 using Eco.Gameplay.DynamicValues;
 using Eco.Gameplay.Items;
-using Eco.Gameplay.Objects;
 using Eco.Shared;
 using Eco.Shared.Localization;
 using Newtonsoft.Json;
@@ -62,8 +61,7 @@ namespace JsExporter
             result["Recipes"] = recipes;
             foreach (RecipeFamily family in RecipeFamily.AllRecipes)
             {
-                foreach (Recipe recipe in family.Recipes)
-                    recipes[recipe.GetType().Name] = ProcessRecipeType(family, recipe);
+                recipes[family.GetType().Name] = ProcessRecipeType(family);
             }
 
             using (TextWriter textWriter = new StreamWriter("config.json"))
@@ -88,20 +86,21 @@ namespace JsExporter
         /// <summary>
         /// Checks recipe
         /// </summary>
-        private JToken ProcessRecipeType(RecipeFamily family, Recipe recipe)
+        private JToken ProcessRecipeType(RecipeFamily family)
         {
             JObject recipeObj = new JObject();
             recipeObj["labor"] = family.LaborInCalories.GetBaseValue;
+            recipeObj["numRecipes"] = family.Recipes.Count;
 
             recipeObj["products"] = new JObject();
-            foreach (var product in recipe.Items)
+            foreach (var product in family.Product)
             {
                 string name = product.Item.Type.Name;
                 recipeObj["products"][name] = product.Quantity.GetBaseValue;
             }
 
             recipeObj["ingredients"] = new JObject();
-            foreach (var ingredient in recipe.Ingredients)
+            foreach (var ingredient in family.Ingredients)
             {
                 string name = (ingredient.IsSpecificItem ? ingredient.Item.Type.Name : ingredient.Tag.Name + "Tag");
                 var ingredientObj = recipeObj["ingredients"][name] = new JObject();
