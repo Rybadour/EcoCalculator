@@ -117,12 +117,13 @@ namespace JsExporter
                 reqSkillsObj[name] = reqSkill.Level;
             }
 
-            var tablesObj = recipeObj["tables"] = new JObject();
+            JArray tablesArray = new JArray();
+            recipeObj["tables"] = tablesArray;
             foreach (var tableType in CraftingComponent.TablesForRecipe(family.GetType()))
             {
                 WorldObjectItem creatingItem = WorldObjectItem.GetCreatingItemTemplateFromType(tableType);
                 string name = creatingItem.Type.Name;
-                tablesObj.Append(name);
+                tablesArray.Add(name);
             }
             /* */
 

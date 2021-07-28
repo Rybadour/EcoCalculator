@@ -32,9 +32,11 @@ export default class Skills extends React.Component {
                         key={skillName}
                         skillName={skillName}
                         skillData={this.props.skills.get(skillName)}
+                        tableSettings={this.props.tableSettings}
                         localization={this.props.localization}
                         onChangeSkill={this.props.onChangeSkill}
                         onRemoveSkill={this.props.onRemoveSkill}
+                        onChangeTableSetting={this.props.onChangeTableSetting}
                     />
                 )}
             </Fragment>

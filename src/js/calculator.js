@@ -21,6 +21,7 @@ export default class Calculator extends React.Component {
         this.handleAddSkill = this.handleAddSkill.bind(this);
         this.handleRemoveSkill = this.handleRemoveSkill.bind(this);
         this.handleChangeSkill = this.handleChangeSkill.bind(this);
+        this.handleChangeTableSetting = this.handleChangeTableSetting.bind(this);
 
         this.handleImport = this.handleImport.bind(this);
 
@@ -44,6 +45,7 @@ export default class Calculator extends React.Component {
             restRecipes: Object.keys(this.props.config.Recipes),
             allSkills: Object.keys(allSkills),
             skills: Map(),
+            tableSettings: Map(),
             ingredients: {},
             languages: languages,
             language: languages[0],
@@ -202,11 +204,17 @@ export default class Calculator extends React.Component {
             Object.keys(props.config.Recipes)
             .filter(recipe => !selectedRecipes.get(props.config.Recipes[recipe].result, Map()).has(recipe));
 
-        let usedSkills = Set().withMutations(usedSkills => {
+        let usedSkills = Map().withMutations(usedSkills => {
             selectedRecipes.valueSeq().forEach((recipes) => {
-                recipes.keySeq().forEach((recipe) => {
-                    Object.keys(props.config.Recipes[recipe].requiredSkills).forEach((skill) => {
-                        usedSkills.add(skill);
+                recipes.keySeq().forEach((recipeId) => {
+                    const recipe = props.config.Recipes[recipeId];
+                    Object.keys(recipe.requiredSkills).forEach((skill) => {
+                        if (!usedSkills.has(skill))
+                            usedSkills.set(skill, Set());
+
+                        recipe.tables.forEach((table) => {
+                            usedSkills.update(skill, Set(), tables => tables.add(table));
+                        });
                     });
                 });
             });
@@ -230,11 +238,11 @@ export default class Calculator extends React.Component {
             skills: state.skills
                 .filter((skillData, skillName) => usedSkills.has(skillName))
                 .withMutations((skills) => {
-                    usedSkills.toSeq().forEach((skillName) => {
+                    usedSkills.keySeq().forEach((skillName) => {
                         if(skills.has(skillName))
                             return;
 
-                        skills.set(skillName, Map({'value': 0, 'lavish': false}));
+                        skills.set(skillName, Map({'value': 0, 'lavish': false, 'tables': usedSkills.get(skillName)}));
                     });
                 }),
             ingredients: newIngredients
@@ -277,6 +285,16 @@ export default class Calculator extends React.Component {
                     .setIn([skillName, 'value'], skillValue)
                     .setIn([skillName, 'lavish'], lavishValue)
             };
+        });
+        this.setState(this.updatePrices);
+        this.setState(Calculator.updateExportData);
+    }
+
+    handleChangeTableSetting(table, setting) {
+        this.setState((state) => {
+            return {
+                tableSettings: state.tableSettings.setIn([table], setting),
+            }
         });
         this.setState(this.updatePrices);
         this.setState(Calculator.updateExportData);
@@ -332,7 +350,15 @@ export default class Calculator extends React.Component {
 
                 let price = 0;
                 Object.keys(recipe.ingredients).forEach((ingredient) => {
-                    price += ingredientPrices[ingredient] * recipe.ingredients[ingredient].quantity;
+                    let contribution = ingredientPrices[ingredient] * recipe.ingredients[ingredient].quantity;
+
+                    if (!ingredient.isStatic) {
+                        const lavish = this.getRecipeUsesLavish(recipe, state);
+                        const moduleModifier = this.getRecipeModuleModifier(recipe, state); 
+                        contribution *= (lavish ? 0.95 : 1) * moduleModifier;
+                    }
+                    
+                    price += contribution;
                 });
 
                 Object.keys(recipe.products).forEach((product, index) => {
@@ -376,6 +402,21 @@ export default class Calculator extends React.Component {
         return topologicalSort(itemDependencies).reverse();
     }
 
+    getRecipeUsesLavish(recipe, state) {
+        const skills = state.skills.filter((data, skill) => recipe.requiredSkills.hasOwnProperty(skill) && data.get('lavish'));
+        return skills.size > 0;
+    }
+
+    getRecipeModuleModifier(recipe, state) {
+        const modifiers = state.tableSettings
+            .filter((setting, table) => setting !== 'unused' && recipe.tables.includes(table))
+            .valueSeq()
+            .toArray()
+            .map((setting) => parseFloat(setting, 10));
+        
+        return (modifiers.length > 0 ? Math.max(...modifiers) : 1);
+    }
+
     render(){
         return(
             <Fragment>
@@ -397,10 +438,12 @@ export default class Calculator extends React.Component {
                         <Skills
                             allSkills={this.state.allSkills}
                             skills={this.state.skills}
+                            tableSettings={this.state.tableSettings}
                             localization={this.state.localization}
                             onChangeSkill={this.handleChangeSkill}
                             onAddSkill={this.handleAddSkill}
                             onRemoveSkill={this.handleRemoveSkill}
+                            onChangeTableSetting={this.handleChangeTableSetting}
                         />
 
                     </Col>
