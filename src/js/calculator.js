@@ -8,6 +8,7 @@ import Col from 'react-bootstrap/Col';
 import { Map, Set } from 'immutable';
 import ExportDialog from "./export-dialog";
 import ImportDialog from "./import-dialog";
+import topologicalSort from './topographical-sort';
 
 /**
  * Main calculator
@@ -70,9 +71,10 @@ export default class Calculator extends React.Component {
             if (index < 0)
                 return {};
 
+            const products = props.config.Recipes[recipe].products;
             return {
                 selectedRecipes: state.selectedRecipes.update(
-                    props.config.Recipes[recipe].result,
+                    Object.keys(products)[0],
                     (val = Map()) => val.set(recipe, 0)
                 ),
             };
@@ -95,10 +97,10 @@ export default class Calculator extends React.Component {
             const recipes = props.config.Recipes;
 
             state.restRecipes
-                .filter(recipe => recipes[recipe].skill === skillName)
+                .filter(recipe => recipes[recipe].requiredSkills.hasOwnProperty(skillName))
                 .forEach(recipe => {
                     selectedRecipes = selectedRecipes.update(
-                        recipes[recipe].result,
+                        Object.keys(recipes[recipe].products)[0],
                         (val = Map()) => val.set(recipe, 0)
                     );
                 });
@@ -120,7 +122,7 @@ export default class Calculator extends React.Component {
         this.setState((state, props) => {
             return {selectedRecipes:
                     state.selectedRecipes
-                        .map((recipes) => recipes.filterNot((price, recipe) => props.config.Recipes[recipe].skill === skillName))
+                        .map((recipes) => recipes.filterNot((price, recipe) => props.config.Recipes[recipe].requiredSkills.hasOwnProperty(skillName)))
                         .filter((recipes) => recipes.size > 0)
             };
         });
@@ -203,11 +205,9 @@ export default class Calculator extends React.Component {
         let usedSkills = Set().withMutations(usedSkills => {
             selectedRecipes.valueSeq().forEach((recipes) => {
                 recipes.keySeq().forEach((recipe) => {
-                    const skillName = props.config.Recipes[recipe].skill;
-                    if(typeof skillName === 'undefined')
-                        return;
-
-                    usedSkills.add(skillName);
+                    Object.keys(props.config.Recipes[recipe].requiredSkills).forEach((skill) => {
+                        usedSkills.add(skill);
+                    });
                 });
             });
         });
@@ -318,55 +318,62 @@ export default class Calculator extends React.Component {
             ingredientPrices[ingredient] = parseFloat(state.ingredients[ingredient]);
         });
 
-        let makeWork = true;
         let tries = 0;
         let selectedRecipes = state.selectedRecipes;
-        while(makeWork){
-            makeWork = false;
-            tries++;
-            if(tries > 100){
-                console.log("Too much iterations in calculation");
+        const sortedRecipes = this.getSortedRecipes(state.selectedRecipes, props.config.Recipes);
+
+        sortedRecipes.forEach((productId) => {
+            const recipes = selectedRecipes.get(productId);
+            if (recipes === undefined)
                 return;
-            }
 
-            state.selectedRecipes.valueSeq().forEach((recipes) => {
-                recipes.keySeq().forEach((recipeId) => {
-                    const recipe = props.config.Recipes[recipeId];
-                    let allIngredientsKnown = true;
-                    let price = 0;
-                    Object.keys(recipe.ingredients).forEach((ingredient) => {
-                        if(typeof ingredientPrices[ingredient] === 'undefined'){
-                            allIngredientsKnown = false;
+            recipes.keySeq().forEach((recipeId) => {
+                const recipe = props.config.Recipes[recipeId];
+
+                let price = 0;
+                Object.keys(recipe.ingredients).forEach((ingredient) => {
+                    price += ingredientPrices[ingredient] * recipe.ingredients[ingredient].quantity;
+                });
+
+                Object.keys(recipe.products).forEach((product, index) => {
+                    let quantity = recipe.products[product];
+                    if (index === 0)
+                    {
+                        price /= quantity;
+
+                        selectedRecipes = selectedRecipes.setIn([product, recipeId], price);
+                        if(typeof ingredientPrices[product] !== 'undefined' && ingredientPrices[product] <= price)
                             return;
-                        }
 
-                        price += ingredientPrices[ingredient] * recipe.ingredients[ingredient].quantity;
-                    });
-
-                    if(!allIngredientsKnown)
-                        return;
-
-                    Object.keys(recipe.products).forEach((product, index) => {
-                        let quantity = recipe.products[product];
-                        if (index === 0)
-                        {
-                            price /= quantity;
-
-                            selectedRecipes = selectedRecipes.setIn([product, recipeId], price);
-                            if(typeof ingredientPrices[product] !== 'undefined' && ingredientPrices[product] <= price)
-                                return;
-
-                            ingredientPrices[product] = price;
-                        }
-                        makeWork = true;
-                    });
+                        ingredientPrices[product] = price;
+                    }
                 });
             });
-        }
+        });
 
         return {
             selectedRecipes: selectedRecipes
         };
+    }
+
+    getSortedRecipes(selectedRecipes, recipes) {
+        const itemDependencies = {};
+        selectedRecipes.keySeq().forEach((productId) => {
+            selectedRecipes.get(productId).keySeq().forEach((recipeId) => {
+                const ingredients = Object.keys(recipes[recipeId].ingredients);
+                if (!itemDependencies.hasOwnProperty(productId))
+                    itemDependencies[productId] = [];
+
+                ingredients.forEach((ingredientId) => {
+                    if (!itemDependencies.hasOwnProperty(ingredientId))
+                        itemDependencies[ingredientId] = [];
+
+                    itemDependencies[productId].push(ingredientId);
+                });
+            });
+        });
+
+        return topologicalSort(itemDependencies).reverse();
     }
 
     render(){
