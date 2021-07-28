@@ -330,31 +330,36 @@ export default class Calculator extends React.Component {
             }
 
             state.selectedRecipes.valueSeq().forEach((recipes) => {
-                recipes.keySeq().forEach((recipe) => {
+                recipes.keySeq().forEach((recipeId) => {
+                    const recipe = props.config.Recipes[recipeId];
                     let allIngredientsKnown = true;
                     let price = 0;
-                    Object.keys(props.config.Recipes[recipe].ingredients).forEach((ingredient) => {
+                    Object.keys(recipe.ingredients).forEach((ingredient) => {
                         if(typeof ingredientPrices[ingredient] === 'undefined'){
                             allIngredientsKnown = false;
                             return;
                         }
 
-                        price += ingredientPrices[ingredient] * props.config.Recipes[recipe].ingredients[ingredient](skills, talents);
+                        price += ingredientPrices[ingredient] * parseInt(recipe.ingredients[ingredient], 10);
                     });
 
                     if(!allIngredientsKnown)
                         return;
 
-                    price /= props.config.Recipes[recipe].quantity(skills, talents);
+                    recipe.products.keySeq().forEach((product, index) => {
+                        let quantity = parseInt(recipe.products[product], 10);
+                        if (index === 0)
+                        {
+                            price /= quantity;
 
-                    const product = props.config.Recipes[recipe].result;
-                    selectedRecipes = selectedRecipes.setIn([product, recipe], price);
+                            selectedRecipes = selectedRecipes.setIn([product, recipeId], price);
+                            if(typeof ingredientPrices[product] !== 'undefined' && ingredientPrices[product] <= price)
+                                return;
 
-                    if(typeof ingredientPrices[product] !== 'undefined' && ingredientPrices[product] <= price)
-                        return;
-
-                    ingredientPrices[product] = price;
-                    makeWork = true;
+                            ingredientPrices[product] = price;
+                        }
+                        makeWork = true;
+                    });
                 });
             });
         }

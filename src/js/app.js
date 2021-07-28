@@ -48,14 +48,6 @@ export default class App extends React.Component {
             .then(res => res.json())
             .then(
                 (result) => {
-                    Object.keys(result['Recipes']).map(function(recipeName){
-                        const recipeData = result['Recipes'][recipeName];
-                        recipeData['quantity'] = new Function('skills', 'talents', 'return ' + recipeData['quantity']);
-                        Object.keys(recipeData['ingredients']).map(function(ingredientName){
-                            recipeData['ingredients'][ingredientName] =
-                                new Function('skills', 'talents', 'return ' + recipeData['ingredients'][ingredientName]);
-                        });
-                    });
                     this.setState({
                         isLoaded: true,
                         config: result

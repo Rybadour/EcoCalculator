@@ -28,8 +28,6 @@ namespace JsExporter
 {
     public class JsExporter : IModKitPlugin
     {
-        private string _usedSkill;
-
         public JsExporter()
         {
             JToken result = new JObject();
@@ -43,14 +41,18 @@ namespace JsExporter
 
                 Localizer.TrySetLanguage(language);
                 JObject localization = new JObject();
-                result["Localization"][language.GetLocDisplayName()] = localization;
+                result["Localization"][language.GetLocDisplayName().ToString()] = localization;
 
                 foreach (Item item in Item.AllItems)
                 {
                     localization[item.Type.Name] = (string)item.DisplayName;
+                    foreach (Tag tag in item.Tags())
+                    {
+                        localization[tag.Name + "Tag"] = (string)tag.DisplayName;
+                    }
                 }
 
-                foreach (Recipe recipe in Recipe.AllRecipes)
+                foreach (RecipeFamily recipe in RecipeFamily.AllRecipes)
                 {
                     localization[recipe.GetType().Name] = (string)recipe.DisplayName;
                 }
@@ -58,9 +60,10 @@ namespace JsExporter
 
             JObject recipes = new JObject();
             result["Recipes"] = recipes;
-            foreach (Recipe recipe in Recipe.AllRecipes)
+            foreach (RecipeFamily family in RecipeFamily.AllRecipes)
             {
-                recipes[recipe.GetType().Name] = ProcessRecipeType(recipe);
+                foreach (Recipe recipe in family.Recipes)
+                    recipes[recipe.GetType().Name] = ProcessRecipeType(family, recipe);
             }
 
             using (TextWriter textWriter = new StreamWriter("config.json"))
@@ -85,81 +88,47 @@ namespace JsExporter
         /// <summary>
         /// Checks recipe
         /// </summary>
-        private JToken ProcessRecipeType(Recipe recipe)
+        private JToken ProcessRecipeType(RecipeFamily family, Recipe recipe)
         {
-            JObject result = new JObject();
+            JObject recipeObj = new JObject();
+            recipeObj["labor"] = family.LaborInCalories.GetBaseValue;
 
-            _usedSkill = null;
-            bool first = true;
-            Logger.Assert(recipe.Products.Length > 0, "Products array should be not empty");
-            foreach (var craftingElement in recipe.Products)
+            recipeObj["products"] = new JObject();
+            foreach (var product in recipe.Items)
             {
-                string name = craftingElement.Item.Type.Name;
-                if (first)
-                {
-                    first = false;
-                    result["result"] = name;
-                    result["quantity"] = EvaluateDynamicValue(craftingElement.Quantity);
-                    result["ingredients"] = new JObject();
-                    continue;
-                }
-
-                result["ingredients"][name] = EvaluateDynamicValue(craftingElement.Quantity);
+                string name = product.Item.Type.Name;
+                recipeObj["products"][name] = product.Quantity.GetBaseValue;
             }
 
-            foreach (var craftingElement in recipe.Ingredients)
+            recipeObj["ingredients"] = new JObject();
+            foreach (var ingredient in recipe.Ingredients)
             {
-                string name = craftingElement.Item.Type.Name;
-                result["ingredients"][name] = EvaluateDynamicValue(craftingElement.Quantity);
+                string name = (ingredient.IsSpecificItem ? ingredient.Item.Type.Name : ingredient.Tag.Name + "Tag");
+                var ingredientObj = recipeObj["ingredients"][name] = new JObject();
+                ingredientObj["isTag"] = !ingredient.IsSpecificItem;
+                ingredientObj["isStatic"] = (ingredient.Quantity is ConstantValue);
+                ingredientObj["quantity"] = ingredient.Quantity.GetBaseValue;
             }
 
-            if (_usedSkill != null)
+            /* */
+            var reqSkillsObj = recipeObj["requiredSkills"] = new JObject();
+            foreach (var reqSkill in family.RequiredSkills)
             {
-                result["skill"] = _usedSkill;
+                string name = reqSkill.SkillItem.Type.Name;
+                reqSkillsObj[name] = reqSkill.Level;
             }
 
-            foreach (var tableType in CraftingComponent.TablesForRecipe(typeof(Recipe)))
+            var tablesObj = recipeObj["tables"] = new JObject();
+            foreach (var tableType in CraftingComponent.TablesForRecipe(family.GetType()))
             {
-                Logger.Assert(tableType.IsSubclassOf(typeof(WorldObject)), $"{tableType} is not a world object");
-                foreach (RequireComponentAttribute attribute in tableType.GetCustomAttributes(typeof(RequireComponentAttribute), true))
-                {
-                    
-                }
+                WorldObjectItem creatingItem = WorldObjectItem.GetCreatingItemTemplateFromType(tableType);
+                string name = creatingItem.Type.Name;
+                tablesObj.Append(name);
             }
+            /* */
 
 
-            return result;
-        }
-
-        /// <summary>
-        /// Converts Eco dynamic value to js
-        /// </summary>
-        private string EvaluateDynamicValue(IDynamicValue value)
-        {
-            if (value is ConstantValue)
-            {
-                return value.GetBaseValue.ToString(CultureInfo.InvariantCulture);
-            }
-
-            if (value is MultiDynamicValue multiValue)
-            {
-                string parameters = string.Join(",", multiValue.Values.Select(EvaluateDynamicValue));
-                return $"Operation_{multiValue.Op}({parameters})";
-            }
-
-            if (value is SkillModifiedValue skillValue)
-            {
-                string values = string.Join(",", skillValue.Values.Select(floatValue => floatValue.ToString(CultureInfo.InvariantCulture)));
-                _usedSkill = skillValue.SkillType.Name;
-                return $"[{values}][skills[\"{skillValue.SkillType.Name}\"]]";
-            }
-
-            if (value is TalentModifiedValue talentValue)
-            {
-                return $"talents[\"{talentValue.TalentType.Name}\"] ? {talentValue.Talent.Value.ToString(CultureInfo.InvariantCulture)} : {talentValue.BaseValue.ToString(CultureInfo.InvariantCulture)}";
-            }
-
-            throw new Exception($"Can't evaluate value {value}");
+            return recipeObj;
         }
     }
 }
