@@ -347,6 +347,8 @@ export default class Calculator extends React.Component {
 
             recipes.keySeq().forEach((recipeId) => {
                 const recipe = props.config.Recipes[recipeId];
+                if (!this.isRecipeActive(recipe, state))
+                    return;
 
                 let price = 0;
                 Object.keys(recipe.ingredients).forEach((ingredient) => {
@@ -417,7 +419,20 @@ export default class Calculator extends React.Component {
         return (modifiers.length > 0 ? Math.max(...modifiers) : 1);
     }
 
+    isRecipeActive(recipe, state) {
+        const settings = state.tableSettings
+            .filter((setting, table) => setting !== 'unused' && recipe.tables.includes(table))
+        
+        return settings.size > 0;
+    }
+
     render(){
+        const activeRecipes = this.state.selectedRecipes
+            .map((recipes, productId) => recipes.filter(
+                (price, recipe) => this.isRecipeActive(this.props.config.Recipes[recipe], this.state)
+            ))
+            .filter((recipes) => recipes.size > 0);
+
         return(
             <Fragment>
                 <Row>
@@ -457,7 +472,7 @@ export default class Calculator extends React.Component {
                     <Col className="border">
                         <h2 className="text-center">Output prices</h2>
                         <Results
-                            results={this.state.selectedRecipes}
+                            results={activeRecipes}
                             restRecipes={this.state.restRecipes}
                             localization={this.state.localization}
                             onRemoveRecipe={this.handleRemoveRecipe}
