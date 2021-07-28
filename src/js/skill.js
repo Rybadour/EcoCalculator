@@ -47,9 +47,13 @@ export default class Skill extends React.Component {
     }
 
     render(){
+        const localization = this.props.localization;
         const skillName = this.props.skillName;
         const skillValue = this.props.skillData.get('value');
-        const tables = this.props.skillData.get('tables');
+        const tables = this.props.skillData.get('tables')
+            .sort(function(a, b){
+                return localization[a].localeCompare(localization[b]);
+            });
         const tableSettings = this.props.tableSettings;
         const talentName = skillName.substring(0, skillName.length - 5)  + "LavishWorkspaceTalentGroup";
 
@@ -75,7 +79,7 @@ export default class Skill extends React.Component {
                     </Col>
                 </Row>
                 {tables.map((table) => 
-                    <Row className="my-1">
+                    <Row className="my-1" key={skillName + table}>
                         <Col xs="7">
                             <label className="pl-3" htmlFor={skillName + table}>
                                 {this.props.localization[table]}
